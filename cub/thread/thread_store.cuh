@@ -120,6 +120,20 @@ __device__ __forceinline__ void ThreadStore(OutputIteratorT itr, T val);
 #ifndef DOXYGEN_SHOULD_SKIP_THIS    // Do not document
 
 
+/// Templated store iteration (inductive case)
+template <typename OutputIteratorT, typename T, int COUNT>
+__device__ __forceinline__ void IterateThreadStoreDeref(OutputIteratorT ptr, T *vals, Int2Type<COUNT>)
+{
+    ptr[COUNT - 1] = vals[COUNT - 1];
+    IterateThreadStoreDeref(ptr, vals, Int2Type<COUNT - 1>());
+}
+
+/// Templated store iteration (base case)
+template <typename OutputIteratorT, typename T>
+__device__ __forceinline__ void IterateThreadStoreDeref(OutputIteratorT ptr, T *vals, Int2Type<0>)
+{}
+
+
 /// Helper structure for templated store iteration (inductive case)
 template <int COUNT, int MAX>
 struct IterateThreadStore
@@ -130,14 +144,6 @@ struct IterateThreadStore
         ThreadStore<MODIFIER>(ptr + COUNT, vals[COUNT]);
         IterateThreadStore<COUNT + 1, MAX>::template Store<MODIFIER>(ptr, vals);
     }
-
-    template <typename OutputIteratorT, typename T>
-    static __device__ __forceinline__ void Dereference(OutputIteratorT ptr, T *vals)
-    {
-        ptr[COUNT] = vals[COUNT];
-        IterateThreadStore<COUNT + 1, MAX>::Dereference(ptr, vals);
-    }
-
 };
 
 /// Helper structure for templated store iteration (termination case)
@@ -146,9 +152,6 @@ struct IterateThreadStore<MAX, MAX>
 {
     template <CacheStoreModifier MODIFIER, typename T>
     static __device__ __forceinline__ void Store(T * /*ptr*/, T * /*vals*/) {}
-
-    template <typename OutputIteratorT, typename T>
-    static __device__ __forceinline__ void Dereference(OutputIteratorT /*ptr*/, T * /*vals*/) {}
 };
 
 
@@ -348,9 +351,7 @@ __device__ __forceinline__ void ThreadStoreVolatilePtr(
     for (int i = 0; i < SHUFFLE_MULTIPLE; ++i)
         reinterpret_cast<ShuffleWord*>(words)[i] = reinterpret_cast<ShuffleWord*>(&val)[i];
 
-    IterateThreadStore<0, VOLATILE_MULTIPLE>::template Dereference(
-        reinterpret_cast<volatile VolatileWord*>(ptr),
-        words);
+    IterateThreadStoreDeref(reinterpret_cast<volatile VolatileWord*>(ptr), words, Int2Type<VOLATILE_MULTIPLE>());
 }
 
 
